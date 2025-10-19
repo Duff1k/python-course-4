@@ -1,161 +1,132 @@
+from pickletools import string1
+
 import psycopg2
 
-def insert_students(cur):
-    cur.execute("""
-                INSERT INTO students (full_name, age, group_name)
-                VALUES ('Иван Петров', 21, 'ВИШ-10'),
-                       ('Мария Сидорова', 19, 'ВИШ-11'),
-                       ('Анна Кузнецова', 20, 'ВИШ-10');
-                """)
-    print("Заполнили студентов")
-
-def insert_courses(cur):
-    cur.execute(
-        "INSERT INTO courses(title, hours, teacher) VALUES (%s, %s, %s);",
-        ("Основы Python", 36, "Юрий Анатольевич Андриенко")
-    )
-
-    cur.execute(
-        "INSERT INTO courses(title, hours, teacher) VALUES (%s, %s, %s);",
-        ("Базы данных", 48, "Михаил Георгиевич Жабицкий")
-    )
-
-    print("Заполнили курсы")
+def insert_categories(curp):
+    curp.execute("""
+        INSERT INTO category (name)
+        VALUES ('Супы'),
+               ('Салаты'),
+               ('Горячее'),
+               ('Десерты'),
+               ('Напитки');
+        """)
 
 
-def insert_enrollments(cur):
-    enrollments = [
-        (1, 1),
-        (1, 2),
-        (2, 1),
-        (3, 2)
-    ]
+def insert_dishes(curp):
+    curp.execute("""
+        INSERT INTO dish (title, price, category_id)
+        VALUES ('Margherita Pizza', 1250.50, 3),
+               ('Caesar Salad', 375.75, 2),
+               ('Grilled Chicken', 500.00, 3),
+               ('Chocolate Cake', 359.99, 4),
+               ('Iced Tea', 150.00, 5),
+               ('French Fries', 140.25, 3),
+               ('Spaghetti Bolognese', 740.99, 3),
+               ('Greek Salad', 509.50, 2),
+               ('Fish and Chips', 916.75, 3),
+               ('Tiramisu', 407.25, 4),
+               ('Coffee', 82.99, 5),
+               ('Onion Rings', 205.00, 3),
+               ('Borsh', 410.50, 1),
+               ('Caprese Salad', 710.00, 2),
+               ('Solyanka', 609.99, 1),
+               ('Cheesecake', 310.50, 4),
+               ('Orange Juice', 110.00, 5),
+               ('Mashed Potatoes', 405.75, 3),
+               ('Xarcho', 610.25, 1),
+               ('Fruit Salad', 405.00, 4);
+        """)
 
-    cur.executemany(
-        "INSERT INTO enrollments (student_id, course_id) VALUES (%s, %s);",
-        enrollments
-    )
 
-    print("Заполнили зачисления на курсы")
+def create_category_table(curp, insert: bool = False):
+    curp.execute("""
+    CREATE TABLE IF NOT EXISTS category (
+        id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE
+    );            
+    """)
+    print(curp.name)
+    if insert:
+       insert_categories(curp)
 
-
-def create_students_table(cur, insert: bool = False ):
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS students (
-            id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            full_name VARCHAR(50) NOT NULL,
-            age INT CHECK (age>0),
-            group_name TEXT,
-            admission_date DATE DEFAULT CURRENT_DATE 
-        );            
+def create_dish_table(curp, insert: bool = False):
+    curp.execute("""
+    CREATE TABLE IF NOT EXISTS dish (
+        id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        title TEXT NOT NULL,
+        price NUMERIC(8,2) CHECK (price>0),
+        category_id INT,
+        FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE SET NULL
+    );
     """)
     if insert:
-       insert_students(cur)
+        insert_dishes(curp)
 
-def create_courses_table(cur, insert: bool = False):
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS courses (
-            id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            title TEXT NOT NULL,
-            hours INT CHECK (hours>0),
-            teacher TEXT NOT NULL
-        );
-    """)
-    if insert:
-        insert_courses(cur)
 
-def create_enrollments_table(cur, insert: bool = False):
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS enrollments (
-            id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            student_id INT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-            course_id INT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-            erollment_date DATE DEFAULT CURRENT_DATE,
-            UNIQUE (student_id, course_id)
-        );
-    """)
-    if insert:
-        insert_enrollments(cur)
-
-def get_all_students(conn):
+def get_all_dishes(conn):
     with conn.cursor() as cur:
-        cur.execute("SELECT id, full_name, age, group_name FROM students ORDER BY id DESC")
+        cur.execute("""
+            SELECT title, price, name
+            FROM dish
+            JOIN category ON dish.category_id = category.id
+            ORDER BY name DESC
+        """)
         return cur.fetchall()
 
-def get_first_student_older_than(conn, min_age):
+def get_dishes_between_prices(conn, min_price, max_price):
     with conn.cursor() as cur:
-        cur.execute("""
-            SELECT id, full_name, age
-            FROM students
-            WHERE age > %s
-            ORDER BY id DESC, id
-            LIMIT 1;
-        """, (min_age,))
-        return cur.fetchone()
+        cur.execute(f"""
+            SELECT title, price
+            FROM dish
+            WHERE price BETWEEN {min_price} AND {max_price}
+            ORDER BY price
+        """)
+        return cur.fetchall()
 
-def search_students_by_prefix(conn, start):
-    prefix = str(start)
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT id, full_name
-            FROM students
-            WHERE full_name ILIKE %s
+def search_dishes_by_prefix(conn, start):
+    with conn.cursor() as curp:
+        pref = str(start)
+        curp.execute(f"""
+            SELECT id, title
+            FROM dish
+            WHERE title ILIKE '{pref + "%"}'
             ORDER BY id;
-        """, (prefix + "%",))
-        return cur.fetchall()
+        """)
+        return curp.fetchall()
 
-def get_student_courses(conn):
+def get_top_lowest_dishes(conn, n):
     with conn.cursor() as cur:
-        cur.execute("""
-            SELECT s.full_name, c.title
-            FROM enrollments e
-            INNER JOIN students s ON s.id = e.student_id
-            INNER JOIN courses c ON c.id = e.course_id
-            ORDER BY s.full_name, c.title;
+        cur.execute(f"""
+            SELECT title, price
+            FROM dish
+            ORDER BY price
+            LIMIT {n} 
         """)
         return cur.fetchall()
 
-def get_students_of_course(conn, course_title):
+def get_category_total_dish(conn):
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT s.full_name, c.title
-            FROM enrollments e
-            INNER JOIN students s ON s.id = e.student_id
-            INNER JOIN courses c ON c.id = e.course_id
-            WHERE c.title = %s
-        """, (course_title,))
-        return cur.fetchall()
-
-def get_students_between_ages(conn, min_age, max_age):
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT id, full_name, age
-            FROM students
-            WHERE age BETWEEN %s AND %s
-            ORDER BY id DESC
-        """,(min_age, max_age))
-        return cur.fetchall()
-
-def get_course_student_counts(conn):
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT c.title, COUNT(*) AS total_students
-            FROM enrollments e
-            INNER JOIN courses c ON c.id = e.course_id
-            GROUP BY title
+            SELECT category_id, name, COUNT(category_id) AS total_dishes
+            FROM dish
+            join category on category.id = dish.category_id
+            GROUP BY category_id, name
+            ORDER BY category_id;
         """)
         return cur.fetchall()
 
-def get_students_on_course_by_min_hours(conn, min_hours):
-    with conn.cursor() as cur:
-        cur.execute("""
-        SELECT DISTINCT s.full_name, c.title, c.hours
-        FROM enrollments e
-        INNER JOIN students s ON s.id = e.student_id
-        INNER JOIN courses c ON c.id = e.course_id
-        WHERE c.hours > %s;
-        """, (min_hours,))
-        return cur.fetchall()
+def table_look_like(headers, rows):
+    print(headers)
+    for row in rows:
+        print(tab_control(row))
+    print()
+
+def tab_control(strarr):
+    stt = ""
+    for st in strarr:
+        stt = stt + str(st) + "\t"
+    return stt
 
 try:
     with psycopg2.connect(
@@ -165,20 +136,45 @@ try:
         host="localhost",
         port="5432"
     ) as conn:
-        print("Подключение к БД прошло успешно")
-
         with conn.cursor() as cur:
-            create_students_table(cur)
-            create_courses_table(cur)
-            create_enrollments_table(cur)
-            print(get_all_students(conn))
-            print(get_first_student_older_than(conn, 19))
-            print(search_students_by_prefix(conn, "аНн"))
-            print(get_student_courses(conn))
-            print(get_students_of_course(conn, "Базы данных"))
-            print(get_students_between_ages(conn, 20, 21))
-            print(get_course_student_counts(conn))
-            print(get_students_on_course_by_min_hours(conn, 30))
+        #    create_category_table(cur, True)
+        #   create_dish_table(cur, True)
+            while (True):
+                menu = ("Показать всё меню",
+                        "Показать блюда в ценовом диапазоне",
+                        "Поиск по началу префикса",
+                        "Показать N самых дешёвых блюд",
+                        "Категории и количество блюд",
+                        "Выход"
+                        )
+                for i in range (len(menu)):
+                    print(f"{i+1}. {menu[i]}")
+                num = int(input("Введите номер пункта: "))
+                if num == 1:
+                    table_look_like("Блюдо\tЦена\tКатегория", get_all_dishes(conn))
+                elif num == 2:
+                    min_price = int(input("Введите минимальную стоимость:"))
+                    max_price = int(input("Введите максимальную стоимость:"))
+                    table_look_like("Блюдо\tЦена",get_dishes_between_prices(conn, min_price, max_price))
+                elif num == 3:
+                    prefix = input("Введите начало названия блюда (префикс):")
+                    table_look_like("№\tБлюдо",search_dishes_by_prefix(conn, prefix))
+                elif num == 4:
+                    n = int(input("Введите число N:"))
+                    table_look_like("Блюдо\tЦена", get_top_lowest_dishes(conn, n))
+                elif num == 5:
+                    table_look_like("№\tКатегоря\tКол-во блюд", get_category_total_dish(conn))
+                elif num ==6:
+                    break
+                else:
+                    continue
 
+        #    print(get_first_student_older_than(conn, 19))
+        #    print(search_dishes_by_prefix(conn, "аНн"))
+        #    print(get_student_courses(conn))
+        #    print(get_students_of_course(conn, "Базы данных"))
+        #    print(get_students_between_ages(conn, 20, 21))
+        #    print(get_course_student_counts(conn))
+        #    print(get_students_on_course_by_min_hours(conn, 30))
 except:
-    print("Ошибка при подключении к БД")
+    print("Ошибка при подключении к БД.")
