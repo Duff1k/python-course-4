@@ -137,8 +137,8 @@ try:
         port="5432"
     ) as conn:
         with conn.cursor() as cur:
-        #    create_category_table(cur, True)
-        #   create_dish_table(cur, True)
+            create_category_table(cur, True)
+            create_dish_table(cur, True)
             while (True):
                 menu = ("Показать всё меню",
                         "Показать блюда в ценовом диапазоне",
@@ -168,13 +168,5 @@ try:
                     break
                 else:
                     continue
-
-        #    print(get_first_student_older_than(conn, 19))
-        #    print(search_dishes_by_prefix(conn, "аНн"))
-        #    print(get_student_courses(conn))
-        #    print(get_students_of_course(conn, "Базы данных"))
-        #    print(get_students_between_ages(conn, 20, 21))
-        #    print(get_course_student_counts(conn))
-        #    print(get_students_on_course_by_min_hours(conn, 30))
 except:
     print("Ошибка при подключении к БД.")
