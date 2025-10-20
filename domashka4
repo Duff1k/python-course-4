@@ -1,0 +1,229 @@
+import psycopg2
+from psycopg2 import sql
+import sys
+
+class RestaurantDB:
+    def __init__(self):
+        self.conn = None
+        self.connect()
+        self.init_db()
+    
+    def connect(self):
+        try:
+            self.conn = psycopg2.connect(
+                dbname="restaurant",
+                user="postgres",
+                password="password",
+                host="localhost",
+                port="5432"
+            )
+        except psycopg2.OperationalError:
+            print("Не удалось подключиться к базе данных. Убедитесь, что PostgreSQL запущен.")
+            sys.exit(1)
+    
+    def init_db(self):
+        """Инициализация базы данных и заполнение начальными данными"""
+        with self.conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS category (
+                    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE
+                )
+            """)
+            
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS dish (
+                    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    price NUMERIC(8,2) CHECK (price > 0),
+                    category_id INT,
+                    FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE SET NULL
+                )
+            """)
+            
+            categories = ['Супы', 'Салаты', 'Горячее', 'Десерты', 'Напитки']
+            for category in categories:
+                cur.execute(
+                    "INSERT INTO category (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+                    (category,)
+                )
+            
+            cur.execute("SELECT COUNT(*) FROM dish")
+            if cur.fetchone()[0] == 0:
+                dishes = [
+                    ('Борщ', 350.00, 1),
+                    ('Оливье', 280.00, 2),
+                    ('Цезарь', 320.00, 2),
+                    ('Стейк Рибай', 890.00, 3),
+                    ('Курица гриль', 450.00, 3),
+                    ('Тирамису', 280.00, 4),
+                    ('Чизкейк', 220.00, 4),
+                    ('Кофе латте', 180.00, 5),
+                    ('Чай зеленый', 120.00, 5),
+                    ('Грибной крем-суп', 290.00, 1),
+                    ('Шашлык', 550.00, 3),
+                    ('Мороженое', 150.00, 4)
+                ]
+                for dish in dishes:
+                    cur.execute(
+                        "INSERT INTO dish (title, price, category_id) VALUES (%s, %s, %s)",
+                        dish
+                    )
+            
+            self.conn.commit()
+    
+    def show_all_menu(self):
+        """Показать всё меню"""
+        with self.conn.cursor() as cur:
+            cur.execute("""
+                SELECT d.title, d.price, c.name 
+                FROM dish d 
+                LEFT JOIN category c ON d.category_id = c.id 
+                ORDER BY c.name, d.title
+            """)
+            results = cur.fetchall()
+            
+            print("\n=== ВСЁ МЕНЮ ===")
+            for title, price, category in results:
+                print(f"{title:20} {price:8.2f} руб. {category}")
+            print(f"Всего блюд: {len(results)}")
+    
+    def show_dishes_in_price_range(self):
+        """Показать блюда в ценовом диапазоне"""
+        try:
+            min_price = float(input("Введите минимальную цену: "))
+            max_price = float(input("Введите максимальную цену: "))
+            
+            if min_price < 0 or max_price < 0 or min_price > max_price:
+                print("Ошибка: некорректный диапазон цен")
+                return
+            
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    SELECT d.title, d.price, c.name 
+                    FROM dish d 
+                    LEFT JOIN category c ON d.category_id = c.id 
+                    WHERE d.price BETWEEN %s AND %s 
+                    ORDER BY d.price
+                """, (min_price, max_price))
+                results = cur.fetchall()
+                
+                print(f"\n=== БЛЮДА В ДИАПАЗОНЕ {min_price}-{max_price} руб. ===")
+                for title, price, category in results:
+                    print(f"{title:20} {price:8.2f} руб. {category}")
+                print(f"Найдено блюд: {len(results)}")
+                
+        except ValueError:
+            print("Ошибка: введите числовые значения")
+    
+    def search_by_prefix(self):
+        """Поиск по началу названия"""
+        prefix = input("Введите начало названия блюда: ").strip()
+        if not prefix:
+            print("Ошибка: введите текст для поиска")
+            return
+        
+        with self.conn.cursor() as cur:
+            cur.execute("""
+                SELECT d.title, d.price, c.name 
+                FROM dish d 
+                LEFT JOIN category c ON d.category_id = c.id 
+                WHERE LOWER(d.title) LIKE LOWER(%s) 
+                ORDER BY d.title
+            """, (f"{prefix}%",))
+            results = cur.fetchall()
+            
+            print(f"\n=== РЕЗУЛЬТАТЫ ПОИСКА '{prefix}' ===")
+            for title, price, category in results:
+                print(f"{title:20} {price:8.2f} руб. {category}")
+            print(f"Найдено блюд: {len(results)}")
+    
+    def show_cheapest_dishes(self):
+        """Показать N самых дешёвых блюд"""
+        try:
+            n = int(input("Введите количество блюд (N): "))
+            if n <= 0:
+                print("Ошибка: число должно быть положительным")
+                return
+            
+            with self.conn.cursor() as cur:
+                cur.execute("""
+                    SELECT d.title, d.price, c.name 
+                    FROM dish d 
+                    LEFT JOIN category c ON d.category_id = c.id 
+                    ORDER BY d.price 
+                    LIMIT %s
+                """, (n,))
+                results = cur.fetchall()
+                
+                print(f"\n=== {n} САМЫХ ДЕШЁВЫХ БЛЮД ===")
+                for title, price, category in results:
+                    print(f"{title:20} {price:8.2f} руб. {category}")
+                
+        except ValueError:
+            print("Ошибка: введите целое число")
+    
+    def show_categories_with_count(self):
+        """Показать категории и количество блюд в каждой"""
+        with self.conn.cursor() as cur:
+            cur.execute("""
+                SELECT c.name, COUNT(d.id) as dish_count
+                FROM category c 
+                LEFT JOIN dish d ON c.id = d.category_id 
+                GROUP BY c.id, c.name 
+                ORDER BY c.name
+            """)
+            results = cur.fetchall()
+            
+            print("\n=== КАТЕГОРИИ И КОЛИЧЕСТВО БЛЮД ===")
+            total_dishes = 0
+            for category, count in results:
+                print(f"{category:15} {count:3} блюд")
+                total_dishes += count
+            print(f"Всего блюд: {total_dishes}")
+    
+    def show_menu(self):
+        """Отображение главного меню"""
+        print("\n" + "="*50)
+        print("          РЕСТОРАН 'ВКУСНО И ТОЧКА'")
+        print("="*50)
+        print("1. Показать всё меню")
+        print("2. Показать блюда в ценовом диапазоне")
+        print("3. Поиск по началу названия")
+        print("4. Показать N самых дешёвых блюд")
+        print("5. Категории и количество блюд")
+        print("0. Выход")
+        print("="*50)
+    
+    def run(self):
+        """Главный цикл приложения"""
+        while True:
+            self.show_menu()
+            choice = input("Выберите пункт меню: ").strip()
+            
+            if choice == '1':
+                self.show_all_menu()
+            elif choice == '2':
+                self.show_dishes_in_price_range()
+            elif choice == '3':
+                self.search_by_prefix()
+            elif choice == '4':
+                self.show_cheapest_dishes()
+            elif choice == '5':
+                self.show_categories_with_count()
+            elif choice == '0':
+                print("До свидания!")
+                break
+            else:
+                print("Ошибка: выберите пункт из меню")
+            
+            input("\nНажмите Enter для продолжения...")
+    
+    def __del__(self):
+        """Закрытие соединения при уничтожении объекта"""
+        if self.conn:
+            self.conn.close()
+
+if __name__ == "__main__":
+    app = RestaurantDB()
+    app.run()
