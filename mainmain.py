@@ -126,7 +126,7 @@ def contest_menu(cur):
 
         match user_input:
             case 1:
-                select_all_menu(cur)  # красивый вывод через тире
+                select_all_menu(cur)
             case 2:
                 user_min = float(input('Введите минимальную цену: '))
                 user_max = float(input('Введите максимальную цену: '))
