@@ -199,7 +199,7 @@ try:
     with psycopg2.connect(
             dbname="python_course_db",
             user="postgres",
-            password="psql -U $(whoami) -d postgres",
+            password="psql -U $(whoami) -d postgres",  #да да, к сожалению у меня такой пароль :(((
             host="localhost",
             port="5432"
     ) as conn:
