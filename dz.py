@@ -10,10 +10,8 @@ try:
     )
     print("Подключение к БД успешно")
 
-    # Создаем курсор
     cur = conn.cursor()
 
-    # Создаем таблицу category
     cur.execute("""
         CREATE TABLE IF NOT EXISTS category (
             id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -21,7 +19,6 @@ try:
         )
     """)
 
-    # Создаем таблицу dish
     cur.execute("""
         CREATE TABLE IF NOT EXISTS dish (
             id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -35,7 +32,6 @@ try:
         )
     """)
 
-    # Вставляем категории (только если таблица пустая)
     cur.execute("SELECT COUNT(*) FROM category")
     if cur.fetchone()[0] == 0:
         categories = [
@@ -47,7 +43,6 @@ try:
         ]
         cur.executemany("INSERT INTO category (name) VALUES (%s)", categories)
 
-    # Вставляем блюда русской кухни (только если таблица пустая)
     cur.execute("SELECT COUNT(*) FROM dish")
     if cur.fetchone()[0] == 0:
         dishes = [
@@ -68,7 +63,6 @@ try:
 
     cur.close()
 
-    # Основной цикл меню
     while True:
         print("-"*50)
         print("1 - Показать всё меню")
@@ -77,7 +71,7 @@ try:
         print("4 - Показать N самых дешёвых блюд")
         print("5 - Категории и количество блюд")
         print("6 - Выход")
-        print("-" * 50)
+        print("-"* 50)
         choice = input("Выберите пункт меню (1-6): ").strip()
 
         if choice == "1":
@@ -95,53 +89,36 @@ try:
 
 
         elif choice == "2":
-
             try:
-
                 min_price = float(input("Введите минимальную цену: "))
-
                 max_price = float(input("Введите максимальную цену: "))
-
-                # Проверяем, что максимальная цена больше минимальной
 
                 if max_price <= min_price:
                     print("Ошибка: максимальная цена должна быть больше минимальной")
-
                     continue
 
                 cur = conn.cursor()
 
                 cur.execute("""
-
                            SELECT d.title, d.price, c.name 
-
                            FROM dish d 
-
                            LEFT JOIN category c ON d.category_id = c.id 
-
                            WHERE d.price BETWEEN %s AND %s
-
                            ORDER BY d.price
-
                        """, (min_price, max_price))
-
                 print(f"--- Блюда в диапазоне {min_price}-{max_price} руб. ---")
 
                 dishes = cur.fetchall()
 
                 if dishes:
-
                     for row in dishes:
                         print(f"{row[0]} — {row[1]} руб. — {row[2]}")
-
                 else:
-
                     print("Блюда не найдены")
 
                 cur.close()
 
             except ValueError:
-
                 print("Ошибка: введите корректные числа")
 
         elif choice == "3":
@@ -204,7 +181,6 @@ try:
         elif choice == "6":
             print("До свидания!")
             break
-
         else:
             print("Ошибка: выберите пункт от 1 до 6")
 
